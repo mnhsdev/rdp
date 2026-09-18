@@ -11,26 +11,34 @@ jobs:
     steps:
       - name: Setup Ubuntu
         run: |
+          sudo -i bash <<'ROOT'
           echo "===== Ubuntu ====="
           cat /etc/os-release
-          echo "===== User ====="
+          echo "===== Current User ====="
           whoami
           echo "===== Kernel ====="
           uname -a
+          ROOT
 
       - name: Create Matin user
         env:
           MATIN_PASSWORD: ${{ secrets.MATIN_PASSWORD }}
         run: |
-          useradd -m -s /bin/bash Matin || true
+          sudo -i bash <<ROOT
+          useradd -m -s /bin/bash Matin 2>/dev/null || true
           echo "Matin:${MATIN_PASSWORD}" | chpasswd
           usermod -aG sudo Matin
 
           echo "Matin ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/Matin
           chmod 440 /etc/sudoers.d/Matin
 
+          echo "===== USER ====="
+          id Matin
+          ROOT
+
       - name: Install SSH Server
         run: |
+          sudo -i bash <<'ROOT'
           apt-get update
           apt-get install -y openssh-server curl
 
@@ -42,19 +50,25 @@ jobs:
           systemctl enable ssh
           systemctl restart ssh
 
-          echo "===== SSH ====="
+          echo "===== SSH STATUS ====="
           systemctl --no-pager status ssh || true
+          ROOT
 
       - name: Install Tailscale
         run: |
+          sudo -i bash <<'ROOT'
           curl -fsSL https://tailscale.com/install.sh | sh
+          ROOT
 
       - name: Start Tailscale
         run: |
+          sudo -i bash <<'ROOT'
           mkdir -p /var/lib/tailscale
+
           tailscaled > /tmp/tailscaled.log 2>&1 &
 
           echo "Waiting for tailscaled..."
+
           for i in {1..30}; do
             if tailscale status >/dev/null 2>&1; then
               break
@@ -62,40 +76,50 @@ jobs:
             sleep 1
           done
 
+          echo "tailscaled started."
+          ROOT
+
       - name: Login to Tailscale
         run: |
+          sudo -i bash <<'ROOT'
           echo "========================================="
           echo " TAILSCALE LOGIN"
           echo "========================================="
-          echo "A login URL will appear below."
-          echo "Open it in your browser and authenticate."
+          echo ""
+          echo "The login URL will appear below."
+          echo "Open it in your browser."
+          echo ""
           echo "========================================="
 
           tailscale up --ssh
+          ROOT
 
-      - name: Show connection information
+      - name: Connection information
         run: |
+          sudo -i bash <<'ROOT'
           echo "========================================="
           echo " TAILSCALE CONNECTED"
           echo "========================================="
 
           tailscale status
+
           echo ""
-          echo "Tailscale IP:"
+          echo "Tailscale IPv4:"
           tailscale ip -4
+
           echo ""
           echo "SSH:"
           echo "ssh Matin@$(tailscale ip -4)"
 
           echo ""
           echo "========================================="
-          echo " SSH SERVER IS RUNNING"
+          echo " SERVER IS RUNNING"
           echo "========================================="
+          ROOT
 
-      - name: Keep server alive
+      - name: Keep alive
         run: |
-          echo "Server will remain online until the GitHub Actions job ends."
           while true; do
-            sleep 300
             echo "[$(date)] Server is still running..."
+            sleep 300
           done
